@@ -125,6 +125,13 @@
   <ItemGroup>
     <ClCompile Include="cis29lab2.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Bill.csv" />
+    <None Include="Carts.csv" />
+  </ItemGroup>
+  <ItemGroup>
+    <Xml Include="ProductPrice.xml" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

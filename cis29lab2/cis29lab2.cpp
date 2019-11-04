@@ -194,16 +194,21 @@ public:
 		table.resize(size);
 	}
 
-	// Destructor
-	~HashTable()
-	{
-
-	}
-
 	// Clear the data in hash table and then reset hash table size
-	void setSize(int s)
+	void setSize(unsigned int s)
 	{
 		size = s;
+	}
+
+	//Getters
+	unsigned int getSize()
+	{
+		return size;
+	}
+
+	unsigned int getCount()
+	{
+		return count;
 	}
 
 	// insert a node at the correct location
@@ -212,6 +217,7 @@ public:
 		if (table[hash(get(value))] == NULL)
 		{
 			table[hash(get(value))].reset(new T(value));
+			count++;
 			return true;
 		}
 		return false;
@@ -223,6 +229,7 @@ public:
 		if (table[hash(get(value))] != nullptr)
 		{
 			table[hash(get(value))] = nullptr;
+			count--;
 			return true;
 		}
 		return false;
@@ -266,18 +273,17 @@ private:
 			vec.push_back(bitset<9>(b.substr(i, i + 9)));
 			i += 9;
 		}
-		for_each(vec.begin(), vec.end(), [&](auto i) {name += pHTable->quickSearch(i)->getCharacter(); });
+		for_each(vec.begin(), vec.end(), [&](auto i) {
+			shared_ptr<BarcodeCharBitset> ptemp = pHTable->quickSearch(i);
+			if(ptemp)
+				name += ptemp->getCharacter();
+			});
 		return name;
 	}
 public:
 	Convertor(HashTable<BarcodeCharBitset> &p)
 	{
-		pHTable.reset(&p);
-	}
-
-	~Convertor()
-	{
-
+		pHTable = make_shared<HashTable<BarcodeCharBitset>>(p);
 	}
 
 	string decodeHex(string b)
@@ -292,12 +298,190 @@ public:
 	}
 };
 
+//Product class to store product name and price
+class Product
+{
+protected:
+	string name;	//product name
+	double price;	//product price
+public:
+	//Default constuctor that initalize the data
+	Product()
+	{
+		name = "";
+		price = 0.0;
+	}
+	//overloaded constuctor that initalize the data
+	Product(string n, double p)
+	{
+		name = n;
+		price = p;
+	}
+	//Setter
+	void setName(string n)
+	{
+		name = n;
+	}
+
+	void setPrice(double p)
+	{
+		price = p;
+	}
+	//Getter
+	string getName()
+	{
+		return name;
+	}
+
+	double getPrice()
+	{
+		return price;
+	}
+};
+
+//ProductTable class to store all product node
+class ProductTable
+{
+private:
+	vector<Product> table;
+	int size;
+public:
+	ProductTable()
+	{
+		size = 0;
+	}
+
+	int getSize()
+	{
+		return size;
+	}
+
+	void insert(Product p)
+	{
+		table.push_back(p);
+		size++;
+	}
+
+	double searchPrice(string name)
+	{
+		auto ite = find_if(table.begin(), table.end(), [&](auto i) {return i.getName() == name; });
+		return ite->getPrice();
+	}
+};
+
+class XMLProcessor
+{
+private:
+	string infilename;
+public:
+	XMLProcessor(string i)
+	{
+		infilename = i;
+	}
+
+	void insertAll(ProductTable &pT, Convertor &convertor)
+	{
+		regex rBarcode("\\d{4}\\d*");
+		regex rPrice("\\d+[.]\\d+");	
+		string line;
+		ifstream infile;
+
+		smatch match;
+		string barcode;
+		double price;
+		string name;
+
+		infile.open(infilename);
+		if (!infile) 
+		{ 
+			cout << "Error happened to open the input file!" << endl;
+			system("pause");
+			exit(EXIT_FAILURE);
+		}
+		while (!infile.eof() && infile.good())
+		{
+			getline(infile, line);
+			if (regex_search(line, match, rBarcode))
+			{
+				barcode = match.str();
+				name = convertor.decodeBin(barcode);
+				getline(infile, line);
+				regex_search(line, match, rPrice);
+				price = stod(match.str());
+				Product tempP(name, price);
+				pT.insert(tempP);
+			}
+		}
+	}
+};
+
+class BillOutput
+{
+private:
+	string cartFilename;
+	string outFilename;
+public:
+	BillOutput(string c, string o)
+	{
+		cartFilename = c;
+		outFilename = o;
+	}
+
+	void output(ProductTable& pT, Convertor& convertor)
+	{
+		string line1;
+		string line2;
+		regex rBarcode("\\b\\w+\\b");
+		smatch result;
+		string name;
+		double price;
+		ifstream infile;
+		infile.open(cartFilename);
+		if (!infile)
+		{
+			cout << "Error happened to open the input file!" << endl;
+			system("pause");
+			exit(EXIT_FAILURE);
+		}
+		ofstream outfile;
+		outfile.open(outFilename);
+
+
+		while (!infile.eof() && infile.good())
+		{
+			double total = 0;
+			getline(infile, line1);
+			getline(infile, line2);
+			outfile << line1 << '\n';
+			while (regex_search(line2, result, rBarcode))
+			{
+				name = convertor.decodeHex(result.str());
+				price = pT.searchPrice(name);
+				total += price;
+				outfile << convertor.decodeHex(result.str()) << ',' << price << '\n';
+				line2 = result.suffix();
+			}
+			outfile << "Total" << ',' << total << '\n' << '\n';
+		}
+
+		infile.close();
+		outfile.close();
+	}
+
+};
 int main()
 {
+	string xmlName = "ProductPrice.xml";
+	
 	BarcodeTable bTable;	//Barcode Table in the Lab2
 	HashTable<BarcodeCharBitset> hTable;
 	hTable.insertTable(bTable.getbTable(), [](BarcodeCharBitset& b) {return b.getBset(); });
 	Convertor convertor(hTable);
+	ProductTable pTable;
+	XMLProcessor processor(xmlName);
+	processor.insertAll(pTable, convertor);
+	BillOutput billOutput("Carts.csv", "Bill.csv");
+	billOutput.output(pTable, convertor);
 	system("pause");
 	return 0;
 }
