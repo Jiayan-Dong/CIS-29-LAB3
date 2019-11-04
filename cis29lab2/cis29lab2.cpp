@@ -10,10 +10,163 @@ Name: Jiayan Dong
 #include<regex>
 #include<bitset>
 #include<memory>
-#include <functional>
 
 using namespace std;
 
+//MorseChar to store character and its morse code.
+class BarcodeChar
+{
+protected:
+	char character;	//Charater
+	string barcode;	//Morse Code
+public:
+	//Default constuctor that initalize the data
+	BarcodeChar()
+	{
+		character = 0;
+		barcode = "";
+	}
+	//overloaded constuctor that initalize the data
+	BarcodeChar(char c, string b)
+	{
+		character = c;
+		barcode = b;
+	}
+	//Setter
+	void setCharacter(char c)
+	{
+		character = c;
+	}
+
+	void setBarcode(string b)
+	{
+		barcode = b;
+	}
+	//Getter
+	char getCharacter()
+	{
+		return character;
+	}
+
+	string getBarcode()
+	{
+		return barcode;
+	}
+};
+
+// BarcodeCharBitset inherit from BarcodeChar Class, contain Morse Code as a 9-bit bitset
+class BarcodeCharBitset : public BarcodeChar
+{
+private:
+	bitset<9> bset;		//Morse Code as 10-bit bitset
+	void convertBitset()	//Private function to convert Morse Code to bitset Morse code
+	{
+		regex rNarrow("n");	//Using regualr expression to convert
+		regex rWide("w");
+		string sNarrow("0");
+		string sWide("1");
+		string s = regex_replace(barcode, rNarrow, sNarrow);
+		s = regex_replace(s, rWide, sWide);
+		bitset<9> temp(s);
+		bset = temp;
+	}
+public:
+	//Default constuctor that initalize the data
+	BarcodeCharBitset()
+	{
+		BarcodeChar();
+	}
+
+	//overloaded constuctor that initalize the data
+	BarcodeCharBitset(char c, string b)
+	{
+		character = c;
+		barcode = b;
+		convertBitset();
+	}
+
+	//Setter
+	void setBarcodeChar(char c, string b)
+	{
+		character = c;
+		barcode = b;
+		convertBitset();
+	}
+
+	//Getter
+	bitset<9> getBset()
+	{
+		return bset;
+	}
+};
+
+//MorseTable to store a Morse Table as shown in the QueueTree.pdf
+class BarcodeTable
+{
+private:
+	vector<BarcodeCharBitset> bTable;	//vector contains all BarcodeCharBitsets
+	unsigned int size;	//the size of BarcodeCharBitset table
+public:
+	//Default constuctor that initalize the data
+	BarcodeTable()
+	{
+		size = 44;	//Morse Table size
+		bTable.resize(size);
+		//Initalize Morse Table
+		bTable[0].setBarcodeChar(' ', "nwwnnnwnn");
+		bTable[1].setBarcodeChar('-', "nwnnnnwnw");
+		bTable[2].setBarcodeChar('+', "nwnnnwnwn");
+		bTable[3].setBarcodeChar('$', "nwnwnwnnn");
+		bTable[4].setBarcodeChar('%', "nnnwnwnwn");
+		bTable[5].setBarcodeChar('*', "nwnnwnwnn");
+		bTable[6].setBarcodeChar('.', "wwnnnnwnn");
+		bTable[7].setBarcodeChar('/', "nwnwnnnwn");
+		bTable[8].setBarcodeChar('0', "nnnwwnwnn");
+		bTable[9].setBarcodeChar('1', "wnnwnnnnw");
+		bTable[10].setBarcodeChar('2', "nnwwnnnnw");
+		bTable[11].setBarcodeChar('3', "wnwwnnnnn");
+		bTable[12].setBarcodeChar('4', "nnnwwnnnw");
+		bTable[13].setBarcodeChar('5', "wnnwwnnnn");
+		bTable[14].setBarcodeChar('6', "nnwwwnnnn");
+		bTable[15].setBarcodeChar('7', "nnnwnnwnw");
+		bTable[16].setBarcodeChar('8', "wnnwnnwnn");
+		bTable[17].setBarcodeChar('9', "nnwwnnwnn");
+		bTable[18].setBarcodeChar('A', "wnnnnwnnw");
+		bTable[19].setBarcodeChar('B', "nnwnnwnnw");
+		bTable[20].setBarcodeChar('C', "wnwnnwnnn");
+		bTable[21].setBarcodeChar('D', "nnnnwwnnw");
+		bTable[22].setBarcodeChar('E', "wnnnwwnnn");
+		bTable[23].setBarcodeChar('F', "nnwnwwnnn");
+		bTable[24].setBarcodeChar('G', "nnnnnwwnw");
+		bTable[25].setBarcodeChar('H', "wnnnnwwnn");
+		bTable[26].setBarcodeChar('I', "nnwnnwwnn");
+		bTable[27].setBarcodeChar('J', "nnnnwwwnn");
+		bTable[28].setBarcodeChar('K', "wnnnnnnww");
+		bTable[29].setBarcodeChar('L', "nnwnnnnww");
+		bTable[30].setBarcodeChar('M', "wnwnnnnwn");
+		bTable[31].setBarcodeChar('N', "nnnnwnnww");
+		bTable[32].setBarcodeChar('O', "wnnnwnnwn");
+		bTable[33].setBarcodeChar('P', "nnwnwnnwn");
+		bTable[34].setBarcodeChar('Q', "nnnnnnwww");
+		bTable[35].setBarcodeChar('R', "wnnnnnwwn");
+		bTable[36].setBarcodeChar('S', "nnwnnnwwn");
+		bTable[37].setBarcodeChar('T', "nnnnwnwwn");
+		bTable[38].setBarcodeChar('U', "wwnnnnnnw");
+		bTable[39].setBarcodeChar('V', "nwwnnnnnw");
+		bTable[40].setBarcodeChar('W', "wwwnnnnnn");
+		bTable[41].setBarcodeChar('X', "nwnnwnnnw");
+		bTable[42].setBarcodeChar('Y', "wwnnwnnnn");
+		bTable[43].setBarcodeChar('Z', "nwwnwnnnn");
+	}
+
+	//Getter
+	vector<BarcodeCharBitset> getbTable()
+	{
+		return bTable;
+	}
+};
+
+//Template HashTable to create BarcodeCharBitset hashtable take bitset<9> as key
 template<typename T>
 class HashTable
 {
@@ -25,19 +178,17 @@ private:
 	}
 	unsigned int size;  // hash table size
 	unsigned int count; // number of data stored in the hash table
-	function<bitset<9>(T)> get;
 public:
 	//Constructor
-	HashTable(bitset<9> getBSet(T&))
-	{ 
-		get.assign(getBSet);
+	HashTable()
+	{
 		size = 1023;
 		count = 0;
 		table.resize(size);
 	}
 	//Overload Constructor
-	HashTable(int s) 
-	{ 
+	HashTable(int s)
+	{
 		size = s;
 		count = 0;
 		table.resize(size);
@@ -45,8 +196,8 @@ public:
 
 	// Destructor
 	~HashTable()
-	{ 
-		
+	{
+
 	}
 
 	// Clear the data in hash table and then reset hash table size
@@ -56,26 +207,31 @@ public:
 	}
 
 	// insert a node at the correct location
-	void insert(T value)//insert new value
+	bool insert(T value, bitset<9> get(T&))//insert new value
 	{
-		table[hash(get(value))] = &value;
-	}
-
-	// find and then remove a node
-	bool remove(T value)//remove a node from hash table
-	{
-		if (table[hash(get(value))] != NULL)
+		if (table[hash(get(value))] == NULL)
 		{
-			table[hash(get(value))] = NULL;
+			table[hash(get(value))].reset(new T(value));
 			return true;
 		}
 		return false;
 	}
 
-	// find a target node
-	bool search(T value, T& returnvalue)//return true if found
+	// find and then remove
+	bool remove(T value, bitset<9> get(T&))//remove a node from hash table
 	{
-		if (table[hash(get(value))] != NULL)
+		if (table[hash(get(value))] != nullptr)
+		{
+			table[hash(get(value))] = nullptr;
+			return true;
+		}
+		return false;
+	}
+
+	// find a target
+	bool search(T value, T& returnvalue, bitset<9> get(T&))//return true if found
+	{
+		if (table[hash(get(value))] != nullptr)
 		{
 			returnvalue = *table[hash(get(value))];
 			return true;
@@ -83,108 +239,65 @@ public:
 		return false;
 	}
 
-	T quickSearch(bitset<9> bSet)
+	//insert all value in the table
+	void insertTable(vector<T> vTable, bitset<9> get(T&))
 	{
-		return *table[hash(bSet)];
+		for_each(vTable.begin(), vTable.end(), [&](auto i) {insert(i, get); });
+	}
+
+	// quick search directly takes bitset and return value
+	shared_ptr<T> quickSearch(bitset<9> bSet)
+	{
+		return table[hash(bSet)];
 	}
 };
 
-
-class BarcodeTable
+class Convertor
 {
 private:
-	vector<pair<char, string>> table;
-	unsigned int size;
-	shared_ptr<HashTable<pair<char, string>>> pHTable;
-	void initialHashTable(HashTable<pair<char, string>>& hTable)
+	shared_ptr<HashTable<BarcodeCharBitset>> pHTable;
+	string convert(string b)
 	{
-		regex rNarrow("n");
-		regex rWide("w");
-		string sNarrow("0");
-		string sWide("1");
-
-		auto get = [&](pair<char, string>& p) {
-			string s = regex_replace(p.second, rNarrow, sNarrow);
-			s = regex_replace(s, rWide, sWide);
-			bitset<9> bset(s);
-			return bset;
-		};
-
-		pHTable.reset(new HashTable<pair<char, string>>(get);
-		for_each(table.begin(), table.end(), [&](auto i) {hTable.insert(i); });
+		vector<bitset<9>> vec;
+		string name("");
+		int i = 0;
+		while (i + 9 < b.size())
+		{
+			vec.push_back(bitset<9>(b.substr(i, i + 9)));
+			i += 9;
+		}
+		for_each(vec.begin(), vec.end(), [&](auto i) {name += pHTable->quickSearch(i)->getCharacter(); });
+		return name;
 	}
 public:
-	BarcodeTable()
+	Convertor(HashTable<BarcodeCharBitset> &p)
 	{
-		size = 44;
-		table.resize(size);
-		table[0] = make_pair(' ', "nwwnnnwnn");
-		table[1] = make_pair('-', "nwnnnnwnw");
-		table[2] = make_pair('+', "nwnnnwnwn");
-		table[3] = make_pair('$', "nwnwnwnnn");
-		table[4] = make_pair('%', "nnnwnwnwn");
-		table[5] = make_pair('*', "nwnnwnwnn");
-		table[6] = make_pair('.', "wwnnnnwnn");
-		table[7] = make_pair('/', "nwnwnnnwn");
-		table[8] = make_pair('0', "nnnwwnwnn");
-		table[9] = make_pair('1', "wnnwnnnnw");
-		table[10] = make_pair('2', "nnwwnnnnw");
-		table[11] = make_pair('3', "wnwwnnnnn");
-		table[12] = make_pair('4', "nnnwwnnnw");
-		table[13] = make_pair('5', "wnnwwnnnn");
-		table[14] = make_pair('6', "nnwwwnnnn");
-		table[15] = make_pair('7', "nnnwnnwnw");
-		table[16] = make_pair('8', "wnnwnnwnn");
-		table[17] = make_pair('9', "nnwwnnwnn");
-		table[18] = make_pair('A', "wnnnnwnnw");
-		table[19] = make_pair('B', "nnwnnwnnw");
-		table[20] = make_pair('C', "wnwnnwnnn");
-		table[21] = make_pair('D', "nnnnwwnnw");
-		table[22] = make_pair('E', "wnnnwwnnn");
-		table[23] = make_pair('F', "nnwnwwnnn");
-		table[24] = make_pair('G', "nnnnnwwnw");
-		table[25] = make_pair('H', "wnnnnwwnn");
-		table[26] = make_pair('I', "nnwnnwwnn");
-		table[27] = make_pair('J', "nnnnwwwnn");
-		table[28] = make_pair('K', "wnnnnnnww");
-		table[29] = make_pair('L', "nnwnnnnww");
-		table[30] = make_pair('M', "wnwnnnnwn");
-		table[31] = make_pair('N', "nnnnwnnww");
-		table[32] = make_pair('O', "wnnnwnnwn");
-		table[33] = make_pair('P', "nnwnwnnwn");
-		table[34] = make_pair('Q', "nnnnnnwww");
-		table[35] = make_pair('R', "wnnnnnwwn");
-		table[36] = make_pair('S', "nnwnnnwwn");
-		table[37] = make_pair('T', "nnnnwnwwn");
-		table[38] = make_pair('U', "wwnnnnnnw");
-		table[39] = make_pair('V', "nwwnnnnnw");
-		table[40] = make_pair('W', "wwwnnnnnn");
-		table[41] = make_pair('X', "nwnnwnnnw");
-		table[42] = make_pair('Y', "wwnnwnnnn");
-		table[43] = make_pair('Z', "nwwnwnnnn");
+		pHTable.reset(&p);
 	}
-	
-	~BarcodeTable()
+
+	~Convertor()
 	{
 
 	}
 
-	vector<pair<char, string>> getTable()
+	string decodeHex(string b)
 	{
-		return table;
+		bitset<48> bSet(stoll(b, nullptr, 16));
+		return convert(bSet.to_string());
 	}
 
-	unsigned int getSize()
+	string decodeBin(string b)
 	{
-		return size;
+		return convert(b);
 	}
-
-
 };
 
 int main()
 {
-
+	BarcodeTable bTable;	//Barcode Table in the Lab2
+	HashTable<BarcodeCharBitset> hTable;
+	hTable.insertTable(bTable.getbTable(), [](BarcodeCharBitset& b) {return b.getBset(); });
+	Convertor convertor(hTable);
 	system("pause");
 	return 0;
 }
