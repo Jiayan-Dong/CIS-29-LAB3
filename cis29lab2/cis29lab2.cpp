@@ -298,6 +298,57 @@ public:
 	}
 };
 
+class Node
+{
+private:
+	string name;
+	string data;
+	vector<shared_ptr<Node>> subNodes;
+public:
+	Node()
+	{
+		name = "";
+		data = "";
+	}
+
+	Node(string n, string d)
+	{
+		name = n;
+		data = d;
+	}
+
+	void setName(string n)
+	{
+		name = n;
+	}
+
+	void setData(string d)
+	{
+		data = d;
+	}
+
+	string getData()
+	{
+		return data;
+	}
+
+	string getName()
+	{
+		return name;
+	}
+
+	void pushSubnode(string n, string d)
+	{
+		shared_ptr<Node> uPtr(new Node(n, d));
+		subNodes.push_back(uPtr);
+	}
+
+	vector<shared_ptr<Node>> getSubNodes()
+	{
+		return subNodes;
+	}
+};
+
 //Product class to store product name and price
 class Product
 {
@@ -337,6 +388,11 @@ public:
 	{
 		return price;
 	}
+
+	bool operator == (const Product& p)
+	{
+		return this->name == p.name;
+	}
 };
 
 //ProductTable class to store all product node
@@ -364,6 +420,8 @@ public:
 
 	double searchPrice(string name)
 	{
+		Product temp;
+		table.erase(remove(table.begin(), table.end(), temp), table.end());
 		auto ite = find_if(table.begin(), table.end(), [&](auto i) {return i.getName() == name; });
 		return ite->getPrice();
 	}
@@ -373,45 +431,70 @@ class XMLProcessor
 {
 private:
 	string infilename;
+	vector<Node> xmlData;
+	regex beginPattern;
+	regex endPattern;
+	regex leafPattern;
+	void _process(ifstream &infile, Node &data)
+	{
+		string line;
+		smatch match;
+		getline(infile, line);
+		if (regex_search(line, match, leafPattern))
+		{
+			data.pushSubnode(match[1], match[2]);
+			_process(infile, data);
+		}
+		else if (regex_match(line, match, endPattern))
+		{
+			return;
+		}
+		else if (regex_match(line, match, beginPattern))
+		{
+			data.setName(match[1]);
+			_process(infile, data);
+		}
+	}
 public:
 	XMLProcessor(string i)
 	{
 		infilename = i;
+		beginPattern.assign(R"(<(.*)>)");
+		endPattern.assign(R"(</(.*)>)");
+		leafPattern.assign(R"(<(.*)>(.*)<(/\1)>)");
+
 	}
 
-	void insertAll(ProductTable &pT, Convertor &convertor)
+	void process()
 	{
-		regex rBarcode("\\d{4}\\d*");
-		regex rPrice("\\d+[.]\\d+");	
+		smatch match;
 		string line;
 		ifstream infile;
-
-		smatch match;
-		string barcode;
-		double price;
-		string name;
-
 		infile.open(infilename);
-		if (!infile) 
-		{ 
+		if (!infile)
+		{
 			cout << "Error happened to open the input file!" << endl;
 			system("pause");
 			exit(EXIT_FAILURE);
 		}
 		while (!infile.eof() && infile.good())
 		{
-			getline(infile, line);
-			if (regex_search(line, match, rBarcode))
-			{
-				barcode = match.str();
-				name = convertor.decodeBin(barcode);
-				getline(infile, line);
-				regex_search(line, match, rPrice);
-				price = stod(match.str());
-				Product tempP(name, price);
-				pT.insert(tempP);
-			}
+			Node temp;
+			_process(infile, temp);
+			xmlData.push_back(temp);
 		}
+	}
+
+	void insertAll(ProductTable &pT, Convertor &convertor)
+	{
+		for_each(xmlData.begin(), xmlData.end(), [&](Node i) {
+			if (!i.getSubNodes().empty())
+			{
+				string name = convertor.decodeBin(i.getSubNodes()[0]->getData());
+				double price = stod(i.getSubNodes()[1]->getData());
+				pT.insert(Product(name, price));
+			}
+			});	
 	}
 };
 
@@ -471,17 +554,29 @@ public:
 };
 int main()
 {
-	string xmlName = "ProductPrice.xml";
-	
+	string xmlFilename;
+	string cartFilename;
+	string billFilename;
+	cout << "Welcome to Barcode Code 39 Decryption Program" << endl;
+	cout << "Please enter the ProductPrice.xml to decrypt(with filename extension): ";
+	getline(cin, xmlFilename);
+	cout << "Please enter the Carts.csv(shopping carts) filename(with filename extension): ";
+	getline(cin, cartFilename);
+	cout << "Please enter the output filename(with filename extension .csv): ";
+	getline(cin, billFilename);
+	cout << "Please wait..." << endl;
+
 	BarcodeTable bTable;	//Barcode Table in the Lab2
 	HashTable<BarcodeCharBitset> hTable;
 	hTable.insertTable(bTable.getbTable(), [](BarcodeCharBitset& b) {return b.getBset(); });
 	Convertor convertor(hTable);
 	ProductTable pTable;
-	XMLProcessor processor(xmlName);
+	XMLProcessor processor(xmlFilename);
+	processor.process();
 	processor.insertAll(pTable, convertor);
-	BillOutput billOutput("Carts.csv", "Bill.csv");
+	BillOutput billOutput(cartFilename, billFilename);
 	billOutput.output(pTable, convertor);
+	cout << "The file has been decrypted and The bill is saved. Thank you!" << endl;
 	system("pause");
 	return 0;
 }

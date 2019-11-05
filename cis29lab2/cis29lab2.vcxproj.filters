@@ -23,7 +23,7 @@
     <None Include="Carts.csv">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="Bill.csv">
+    <None Include="OutBill.csv">
       <Filter>Resource Files</Filter>
     </None>
   </ItemGroup>
