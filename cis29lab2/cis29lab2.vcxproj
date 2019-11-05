@@ -126,8 +126,8 @@
     <ClCompile Include="cis29lab2.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Bill.csv" />
     <None Include="Carts.csv" />
-    <None Include="OutBill.csv" />
   </ItemGroup>
   <ItemGroup>
     <Xml Include="ProductPrice.xml" />

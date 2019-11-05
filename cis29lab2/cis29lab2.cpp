@@ -2,6 +2,10 @@
 Cis29
 Lab2 - Containers and Regular Expressions
 Name: Jiayan Dong
+Last Modified: 11/4/2019
+Purpose: Use Regular expressions, and the STL containers: Vector, Stack, Queue, List (and NO Map).
+This assignment simulates Code3of9 Symbology, and is encoded as an binary bar code.
+Data Files: Carts.csv, ProductPrice.xml
 */
 
 #include<iostream>
@@ -13,12 +17,12 @@ Name: Jiayan Dong
 
 using namespace std;
 
-//MorseChar to store character and its morse code.
+//BarcodeChar to store character and its barcode code.
 class BarcodeChar
 {
 protected:
 	char character;	//Charater
-	string barcode;	//Morse Code
+	string barcode;	//barcode
 public:
 	//Default constuctor that initalize the data
 	BarcodeChar()
@@ -54,12 +58,12 @@ public:
 	}
 };
 
-// BarcodeCharBitset inherit from BarcodeChar Class, contain Morse Code as a 9-bit bitset
+// BarcodeCharBitset inherit from BarcodeChar Class, contain barcode as a 9-bit bitset
 class BarcodeCharBitset : public BarcodeChar
 {
 private:
-	bitset<9> bset;		//Morse Code as 10-bit bitset
-	void convertBitset()	//Private function to convert Morse Code to bitset Morse code
+	bitset<9> bset;		//barcode as 9-bit bitset
+	void convertBitset()	//Private function to convert barcode to bitset barcode
 	{
 		regex rNarrow("n");	//Using regualr expression to convert
 		regex rWide("w");
@@ -100,7 +104,7 @@ public:
 	}
 };
 
-//MorseTable to store a Morse Table as shown in the QueueTree.pdf
+//BarcodeTable to store a Barcode Table as shown in the Lab2
 class BarcodeTable
 {
 private:
@@ -259,15 +263,16 @@ public:
 	}
 };
 
+//Convertor converts a hex/bin barcode to 5 characters string - name
 class Convertor
 {
 private:
-	shared_ptr<HashTable<BarcodeCharBitset>> pHTable;
-	string convert(string b)
+	shared_ptr<HashTable<BarcodeCharBitset>> pHTable;	//Barcode char hashtable
+	string convert(string b)	//private function convert bin barcode to 5 characters string
 	{
 		vector<bitset<9>> vec;
 		string name("");
-		int i = 0;
+		unsigned int i = 0;
 		while (i + 9 < b.size())
 		{
 			vec.push_back(bitset<9>(b.substr(i, i + 9)));
@@ -275,48 +280,55 @@ private:
 		}
 		for_each(vec.begin(), vec.end(), [&](auto i) {
 			shared_ptr<BarcodeCharBitset> ptemp = pHTable->quickSearch(i);
-			if(ptemp)
+			if (ptemp)
 				name += ptemp->getCharacter();
 			});
 		return name;
 	}
 public:
-	Convertor(HashTable<BarcodeCharBitset> &p)
+	//Overload Constructor to ininitalize convertor with hashtable
+	Convertor(HashTable<BarcodeCharBitset>& p)
 	{
 		pHTable = make_shared<HashTable<BarcodeCharBitset>>(p);
 	}
 
+	//public function to decode hex barcode
 	string decodeHex(string b)
 	{
 		bitset<48> bSet(stoll(b, nullptr, 16));
 		return convert(bSet.to_string());
 	}
 
+	//public function to decode bin barcode
 	string decodeBin(string b)
 	{
 		return convert(b);
 	}
 };
 
+//Node to store xml data
 class Node
 {
 private:
-	string name;
-	string data;
-	vector<shared_ptr<Node>> subNodes;
+	string name;	//name of the data
+	string data;	//data
+	vector<shared_ptr<Node>> subNodes;	//pointers point to subnodes
 public:
+	//Default constuctor that initalize the data
 	Node()
 	{
 		name = "";
 		data = "";
 	}
 
+	//overloaded constuctor that initalize the data
 	Node(string n, string d)
 	{
 		name = n;
 		data = d;
 	}
 
+	//Setter
 	void setName(string n)
 	{
 		name = n;
@@ -327,6 +339,7 @@ public:
 		data = d;
 	}
 
+	//Getter
 	string getData()
 	{
 		return data;
@@ -337,12 +350,14 @@ public:
 		return name;
 	}
 
+	//Push a node as the target node's subnode
 	void pushSubnode(string n, string d)
 	{
 		shared_ptr<Node> uPtr(new Node(n, d));
 		subNodes.push_back(uPtr);
 	}
 
+	//Get vector of pointers that point to subnode
 	vector<shared_ptr<Node>> getSubNodes()
 	{
 		return subNodes;
@@ -395,29 +410,30 @@ public:
 	}
 };
 
-//ProductTable class to store all product node
+//ProductTable class to store all product objects
 class ProductTable
 {
 private:
-	vector<Product> table;
+	vector<Product> table;	//vector to store all product object
 	int size;
 public:
+	//Default constuctor that initalize the data
 	ProductTable()
 	{
 		size = 0;
 	}
-
+	//overloaded constuctor that initalize the data
 	int getSize()
 	{
 		return size;
 	}
-
+	//insert a product object into the table
 	void insert(Product p)
 	{
 		table.push_back(p);
 		size++;
 	}
-
+	//search the price by passing the product name
 	double searchPrice(string name)
 	{
 		Product temp;
@@ -427,15 +443,17 @@ public:
 	}
 };
 
+//Generic Class XMLProcessor to using regular expressions and use it to parse the ProductPrice.XML file.
 class XMLProcessor
 {
 private:
-	string infilename;
-	vector<Node> xmlData;
-	regex beginPattern;
-	regex endPattern;
-	regex leafPattern;
-	void _process(ifstream &infile, Node &data)
+	string infilename;	//xml filename
+	vector<Node> xmlData;	//vector contain xmlData node
+	regex beginPattern;	//regex begin pattern
+	regex endPattern;	//regex end pattern
+	regex leafPattern;	//regex leaf pattern
+	//Generic Private Recursion function to process a Node contains subnodes, and store it in xmlData vector
+	void _process(ifstream& infile, Node& data)
 	{
 		string line;
 		smatch match;
@@ -456,15 +474,15 @@ private:
 		}
 	}
 public:
+	//Overload constuctor that initalize the data with xml filename
 	XMLProcessor(string i)
 	{
 		infilename = i;
 		beginPattern.assign(R"(<(.*)>)");
 		endPattern.assign(R"(</(.*)>)");
 		leafPattern.assign(R"(<(.*)>(.*)<(/\1)>)");
-
 	}
-
+	//Generic Public process function to process all xml noded
 	void process()
 	{
 		smatch match;
@@ -484,8 +502,8 @@ public:
 			xmlData.push_back(temp);
 		}
 	}
-
-	void insertAll(ProductTable &pT, Convertor &convertor)
+	//insertAll insert Product object of xml node data into Product Table
+	void insertAll(ProductTable& pT, Convertor& convertor)
 	{
 		for_each(xmlData.begin(), xmlData.end(), [&](Node i) {
 			if (!i.getSubNodes().empty())
@@ -494,22 +512,25 @@ public:
 				double price = stod(i.getSubNodes()[1]->getData());
 				pT.insert(Product(name, price));
 			}
-			});	
+			});
 	}
 };
 
+//Class BillOutput to output the bill in an .csv file
 class BillOutput
 {
 private:
-	string cartFilename;
-	string outFilename;
+	string cartFilename;	//input cart csv filename
+	string outFilename;		//output bill csv filename
 public:
+	//Overload constuctor that initalize the data with filenames
 	BillOutput(string c, string o)
 	{
 		cartFilename = c;
 		outFilename = o;
 	}
 
+	//output function Process cart csv file and output bill csv file
 	void output(ProductTable& pT, Convertor& convertor)
 	{
 		string line1;
@@ -528,7 +549,6 @@ public:
 		}
 		ofstream outfile;
 		outfile.open(outFilename);
-
 
 		while (!infile.eof() && infile.good())
 		{
@@ -550,8 +570,9 @@ public:
 		infile.close();
 		outfile.close();
 	}
-
 };
+
+//main function
 int main()
 {
 	string xmlFilename;
@@ -567,15 +588,15 @@ int main()
 	cout << "Please wait..." << endl;
 
 	BarcodeTable bTable;	//Barcode Table in the Lab2
-	HashTable<BarcodeCharBitset> hTable;
-	hTable.insertTable(bTable.getbTable(), [](BarcodeCharBitset& b) {return b.getBset(); });
-	Convertor convertor(hTable);
-	ProductTable pTable;
-	XMLProcessor processor(xmlFilename);
-	processor.process();
-	processor.insertAll(pTable, convertor);
-	BillOutput billOutput(cartFilename, billFilename);
-	billOutput.output(pTable, convertor);
+	HashTable<BarcodeCharBitset> hTable;	//hashtable for barcode char
+	hTable.insertTable(bTable.getbTable(), [](BarcodeCharBitset& b) {return b.getBset(); });	//initailize hashtable
+	Convertor convertor(hTable);	//convertor initailized by hashtable
+	ProductTable pTable;	//Product table to store product objects
+	XMLProcessor processor(xmlFilename);	//XMLProcessor initailized by xml filename
+	processor.process();	//Process the xml file
+	processor.insertAll(pTable, convertor);	//convert node objects to product objects and then insert them to Product table
+	BillOutput billOutput(cartFilename, billFilename);	//BillOutput initailized by input and output filenames
+	billOutput.output(pTable, convertor);	//output file by using Product table and convertors
 	cout << "The file has been decrypted and The bill is saved. Thank you!" << endl;
 	system("pause");
 	return 0;
