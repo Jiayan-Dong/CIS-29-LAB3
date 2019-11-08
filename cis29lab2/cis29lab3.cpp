@@ -1,8 +1,9 @@
 /*
 Cis29
-Lab2 - Containers and Regular Expressions
+Lab3 - Threading
+This Lab is base on Lab2
 Name: Jiayan Dong
-Last Modified: 11/4/2019
+Last Modified: 11/7/2019
 Purpose: Use Regular expressions, and the STL containers: Vector, Stack, Queue, List (and NO Map).
 This assignment simulates Code3of9 Symbology, and is encoded as an binary bar code.
 Data Files: Carts.csv, ProductPrice.xml
@@ -14,9 +15,13 @@ Data Files: Carts.csv, ProductPrice.xml
 #include<regex>
 #include<bitset>
 #include<memory>
+#include<thread>
+#include <mutex>
+
+
 
 using namespace std;
-
+mutex mtx;
 //BarcodeChar to store character and its barcode code.
 class BarcodeChar
 {
@@ -436,6 +441,7 @@ public:
 	//search the price by passing the product name
 	double searchPrice(string name)
 	{
+		lock_guard<mutex> lck(mtx);
 		Product temp;
 		table.erase(remove(table.begin(), table.end(), temp), table.end());
 		auto ite = find_if(table.begin(), table.end(), [&](auto i) {return i.getName() == name; });
@@ -516,6 +522,52 @@ public:
 	}
 };
 
+//Class Counter to achieve mult-thread
+class Counter
+{
+private:
+	regex rBarcode;
+	smatch result;
+	double price, total;
+	string line1, line2, name;
+	vector<pair<string, double>> items;
+
+	void getCart(ifstream& infile, string& line1, string& line2)
+	{
+		lock_guard<mutex> lck(mtx);
+		total = 0;
+		getline(infile, line1);
+		getline(infile, line2);
+	}
+public:
+	Counter()
+	{
+		rBarcode.assign(R"(\b\w+\b)");
+		price, total = 0;
+		line1, line2, name = "";
+	}
+	void outputBill(ifstream& infile, ofstream& outfile, ProductTable& pT, Convertor& convertor)
+	{
+		while (!infile.eof() && infile.good())
+		{
+			vector<pair<string, double>> items;
+			getCart(infile, line1, line2);
+			while (regex_search(line2, result, rBarcode))
+			{
+				name = convertor.decodeHex(result.str());
+				price = pT.searchPrice(name);
+				total += price;
+				items.push_back(make_pair(name, price));
+				line2 = result.suffix();
+			}
+			lock_guard<mutex> lck(mtx);
+			outfile << line1 << '\n';
+			for_each(items.begin(), items.end(), [&](auto i) {outfile << i.first << ',' << i.second << '\n'; });
+			outfile << "Total" << ',' << total << '\n' << '\n';
+		}
+	}
+};
+
 //Class BillOutput to output the bill in an .csv file
 class BillOutput
 {
@@ -533,12 +585,6 @@ public:
 	//output function Process cart csv file and output bill csv file
 	void output(ProductTable& pT, Convertor& convertor)
 	{
-		string line1;
-		string line2;
-		regex rBarcode("\\b\\w+\\b");
-		smatch result;
-		string name;
-		double price;
 		ifstream infile;
 		infile.open(cartFilename);
 		if (!infile)
@@ -549,23 +595,10 @@ public:
 		}
 		ofstream outfile;
 		outfile.open(outFilename);
-
-		while (!infile.eof() && infile.good())
-		{
-			double total = 0;
-			getline(infile, line1);
-			getline(infile, line2);
-			outfile << line1 << '\n';
-			while (regex_search(line2, result, rBarcode))
-			{
-				name = convertor.decodeHex(result.str());
-				price = pT.searchPrice(name);
-				total += price;
-				outfile << convertor.decodeHex(result.str()) << ',' << price << '\n';
-				line2 = result.suffix();
-			}
-			outfile << "Total" << ',' << total << '\n' << '\n';
-		}
+		thread counters[33];
+		for(int i = 0; i <33; i++)
+			counters[i] = thread(&Counter::outputBill, Counter(), ref(infile), ref(outfile), ref(pT), ref(convertor));
+		for (auto& ct : counters) ct.join();
 
 		infile.close();
 		outfile.close();
