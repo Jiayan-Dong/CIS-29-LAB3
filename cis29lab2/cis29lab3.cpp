@@ -3,7 +3,7 @@ Cis29
 Lab3 - Threading
 This Lab is base on Lab2
 Name: Jiayan Dong
-Last Modified: 11/7/2019
+Last Modified: 11/17/2019
 Purpose: Use Regular expressions, and the STL containers: Vector, Stack, Queue, List (and NO Map).
 This assignment simulates Code3of9 Symbology, and is encoded as an binary bar code.
 Data Files: Carts.csv, ProductPrice.xml
