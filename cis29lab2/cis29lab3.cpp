@@ -4,24 +4,49 @@ Lab3 - Threading
 This Lab is base on Lab2
 Name: Jiayan Dong
 Last Modified: 11/17/2019
+Description:
+Model a supermarket (like Costco as in lab2) where lanes are used to process items in customer carts.
+When the customer cart reaches the front of the lane, each item¡¯s barcode in the cart is scanned to
+get the name and the price of the product. When the items in the cart have been processed, a receipt
+is of the items with the total price is given to the customer. Then the next cart in the queue is 
+processed. There is more than one queue processing items.
+
+When a cart reaches the front of the queue, Process the Cart on a thread. The items in the cart are
+processed by decrypting the barcode into characters, and then looking up the product first five 
+characters in the Product data base. The Product data-base can only be accessed by one item at a 
+time, using thread blocking and unblocking techniques.
+
 Purpose: Use Regular expressions, and the STL containers: Vector, Stack, Queue, List (and NO Map).
-This assignment simulates Code3of9 Symbology, and is encoded as an binary bar code.
+This assignment simulates Code3of9 Symbology, and is encoded as an binary bar code, and using threads to 
+create Model a supermarket (like Costco as in lab2) where lanes are used to process items in customer carts.
+
 Data Files: Carts.csv, ProductPrice.xml
 */
 
-#include<iostream>
-#include<fstream>
-#include<vector>
-#include<regex>
-#include<bitset>
-#include<memory>
-#include<thread>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <queue>
+#include <regex>
+#include <bitset>
+#include <memory>
+#include <thread>
 #include <mutex>
-
-
+#include <condition_variable>
 
 using namespace std;
-mutex mtx;
+mutex outputmtx;				// Mutex for get price from database output
+mutex inputmtx;					// Mutex for input product name into database
+mutex getlineMtx;				// Mutex for get carts from Carts.csv
+mutex outputFileMtx;			// Mutex for output the Bills.csv
+condition_variable inputCond;	// Condition_variable for input product name into database
+condition_variable outputCond;	// Condition_variable for get price from database output
+
+vector<bool> ready;				// Flags for input product name ready for each counter
+vector<bool> finished;			// Flags for output product price finished for each counter
+
+int joinedNum = 0;				// The number of the joined threads, it's used as a flag to join the database thread
+
 //BarcodeChar to store character and its barcode code.
 class BarcodeChar
 {
@@ -438,14 +463,44 @@ public:
 		table.push_back(p);
 		size++;
 	}
-	//search the price by passing the product name
-	double searchPrice(string name)
+	//search the price by passing the product name and product price by reference
+	void searchPrice(vector<string>& names, vector<double>& prices)
 	{
-		lock_guard<mutex> lck(mtx);
 		Product temp;
-		table.erase(remove(table.begin(), table.end(), temp), table.end());
-		auto ite = find_if(table.begin(), table.end(), [&](auto i) {return i.getName() == name; });
-		return ite->getPrice();
+		table.erase(remove(table.begin(), table.end(), temp), table.end());	// erase all items in database without name
+		int counterNum = names.size();		// get the number of counters
+		this_thread::sleep_for(std::chrono::milliseconds(500));		// sleep 500ms so counters can prepare their first item
+		// loop until all counters thread end
+		while (true)
+		{
+			unique_lock<mutex> lk(inputmtx);
+			int i = 0;
+			if (joinedNum == counterNum)	// all counters thread end
+				return;						// end database thread
+			inputCond.wait(lk, [&]()->bool {	// using condion varible to check if there is one counter need to process data, and the get the counter id
+				lock_guard<mutex> lck(outputmtx);
+				i = 0;
+				while (i < counterNum)
+				{
+					if (ready[i])
+						return ready[i];
+					if (++i == counterNum)
+					{						
+						return true;
+					}
+				}
+				});
+			if (i != counterNum)	// if id is valid, processing the product name and set up the product price
+			{				
+				ready[i] = false;		// set input product name ready flag back to false for next request
+				string name = names[i];
+				auto ite = find_if(table.begin(), table.end(), [&](auto i) {return i.getName() == name; });
+				prices[i] = ite->getPrice();		// set up product price
+				finished[i] = true;		// set this counter finished accessing database flag to true
+				lk.unlock();
+				outputCond.notify_all();	// unlock and notify other counter so that other counter can access database 
+			}
+		}
 	}
 };
 
@@ -522,49 +577,60 @@ public:
 	}
 };
 
-//Class Counter to achieve mult-thread
+//Class Counter(Lanes) to achieve mult-thread
 class Counter
 {
 private:
-	regex rBarcode;
-	smatch result;
-	double price, total;
-	string line1, line2, name;
-	vector<pair<string, double>> items;
+	regex rBarcode;				// regular epression to spilt line2(items)
+	smatch result;				// smatch to store items
+	double price, total;		// product price and total price of one cart
+	string line1, line2, name;	// line1: Cart Number, line2: Items
+	vector<pair<string, double>> items;	// vector to store information of items(name and price) 
 
+	// getCart function to get line1(Cart Number), line2(Items), using mutex to ensure the input is correct
 	void getCart(ifstream& infile, string& line1, string& line2)
 	{
-		lock_guard<mutex> lck(mtx);
-		total = 0;
+		lock_guard<mutex> lck(getlineMtx);		
 		getline(infile, line1);
 		getline(infile, line2);
 	}
 public:
+	//Default constuctor that initalize the data
 	Counter()
 	{
 		rBarcode.assign(R"(\b\w+\b)");
 		price, total = 0;
 		line1, line2, name = "";
 	}
-	void outputBill(ifstream& infile, ofstream& outfile, ProductTable& pT, Convertor& convertor)
+
+	// outputBill function to simulate lanes(counters) processing items in customer carts, and then output the bill
+	void outputBill(ifstream& infile, ofstream& outfile, Convertor& convertor, string& name, double& price, int i)
 	{
 		while (!infile.eof() && infile.good())
 		{
-			vector<pair<string, double>> items;
-			getCart(infile, line1, line2);
-			while (regex_search(line2, result, rBarcode))
+			items.clear();
+			total = 0;
+			getCart(infile, line1, line2);		// Get line1(Cart Number), line2(Items)
+			while (regex_search(line2, result, rBarcode))	// Using regular epression to spilt line2(items)
 			{
-				name = convertor.decodeHex(result.str());
-				price = pT.searchPrice(name);
-				total += price;
-				items.push_back(make_pair(name, price));
-				line2 = result.suffix();
+				name = convertor.decodeHex(result.str());	// Convert Barcode in to product name
+				ready[i] = true;							// set this counter's ready to access database flag to true
+				unique_lock<mutex> lk(outputmtx);
+				outputCond.wait(lk, [&] {return finished[i]; });	// Wait until database finish its previous work
+				total += price;	
+				items.push_back(make_pair(name, price));	// Using vectors push back to simulate items in cart, pushing one item into the vector's end
+				finished[i] = false;						// set output product price finished flag back to false for next request
+				line2 = result.suffix();					// delete the processed item
+				lk.unlock();
+				inputCond.notify_all();						// unlock and notify database so that other counter can access database
 			}
-			lock_guard<mutex> lck(mtx);
+			lock_guard<mutex> lck(outputFileMtx);			// using mutex to ensure the output bill for the cart is correct
 			outfile << line1 << '\n';
 			for_each(items.begin(), items.end(), [&](auto i) {outfile << i.first << ',' << i.second << '\n'; });
-			outfile << "Total" << ',' << total << '\n' << '\n';
+			outfile << "Total," << total << '\n';
+			outfile << "Counter Id," << i + 1 << '\n' << '\n';
 		}
+		joinedNum++;		// Once the counter(lane) ended, joined thread number + 1
 	}
 };
 
@@ -574,20 +640,22 @@ class BillOutput
 private:
 	string cartFilename;	//input cart csv filename
 	string outFilename;		//output bill csv filename
+	int counterNum;
 public:
 	//Overload constuctor that initalize the data with filenames
-	BillOutput(string c, string o)
+	BillOutput(string cF, string oF, int cN)
 	{
-		cartFilename = c;
-		outFilename = o;
+		cartFilename = cF;
+		outFilename = oF;
+		counterNum = cN;
 	}
 
-	//output function Process cart csv file and output bill csv file
+	//output function Process cart csv file and output bill csv file, this function simulate that lanes are used to process items in customer carts by using threads
 	void output(ProductTable& pT, Convertor& convertor)
 	{
 		ifstream infile;
 		infile.open(cartFilename);
-		if (!infile)
+		if (!infile)	// inputfile vaildation
 		{
 			cout << "Error happened to open the input file!" << endl;
 			system("pause");
@@ -595,11 +663,17 @@ public:
 		}
 		ofstream outfile;
 		outfile.open(outFilename);
-		thread counters[33];
-		for(int i = 0; i <33; i++)
-			counters[i] = thread(&Counter::outputBill, Counter(), ref(infile), ref(outfile), ref(pT), ref(convertor));
-		for (auto& ct : counters) ct.join();
-
+		vector<string> names(counterNum, "");	// vector that contain product names to be accessed in counter(lane) thread and database
+		vector<double> prices(counterNum, 0);	// vector that contain product prices to be accessed in counter(lane) thread and database
+		vector<thread> counters(counterNum);	// vector that contain counter(lane) thread
+		ready.resize(counterNum);				// set up ready flags
+		finished.resize(counterNum);			// set up finished flags
+		for(int i = 0; i < counterNum; i++)		// set up all counter(lane) threads
+			counters[i] = thread(&Counter::outputBill, Counter(), ref(infile), ref(outfile), ref(convertor), ref(names[i]), ref(prices[i]), i);
+		thread dataCenter = thread(&ProductTable::searchPrice, ref(pT), ref(names), ref(prices));	//set up database thread
+		dataCenter.join();
+		for (auto&& i: counters)
+			i.join();		
 		infile.close();
 		outfile.close();
 	}
@@ -608,10 +682,12 @@ public:
 //main function
 int main()
 {
+	int counterNum = 10;	// Simulate 10 counters(lanes) processing carts
+	
 	string xmlFilename;
 	string cartFilename;
 	string billFilename;
-	cout << "Welcome to Barcode Code 39 Decryption Program" << endl;
+	cout << "Welcome to Barcode Code 39 Decryption and supermarket check-out lanes simulator Program" << endl;
 	cout << "Please enter the ProductPrice.xml to decrypt(with filename extension): ";
 	getline(cin, xmlFilename);
 	cout << "Please enter the Carts.csv(shopping carts) filename(with filename extension): ";
@@ -628,7 +704,7 @@ int main()
 	XMLProcessor processor(xmlFilename);	//XMLProcessor initailized by xml filename
 	processor.process();	//Process the xml file
 	processor.insertAll(pTable, convertor);	//convert node objects to product objects and then insert them to Product table
-	BillOutput billOutput(cartFilename, billFilename);	//BillOutput initailized by input and output filenames
+	BillOutput billOutput(cartFilename, billFilename, counterNum);	//BillOutput initailized by input and output filenames
 	billOutput.output(pTable, convertor);	//output file by using Product table and convertors
 	cout << "The file has been decrypted and The bill is saved. Thank you!" << endl;
 	system("pause");
