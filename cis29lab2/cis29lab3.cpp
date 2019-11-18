@@ -39,9 +39,11 @@ mutex outputmtx;				// Mutex for get price from database output
 mutex inputmtx;					// Mutex for input product name into database
 mutex getlineMtx;				// Mutex for get carts from Carts.csv
 mutex outputFileMtx;			// Mutex for output the Bills.csv
+mutex requestMtx;				// Mutex for push or pop the request queue
 condition_variable inputCond;	// Condition_variable for input product name into database
 condition_variable outputCond;	// Condition_variable for get price from database output
 
+queue<int> requests;			// requests queue to put lane ids and used by database 
 vector<bool> ready;				// Flags for input product name ready for each counter
 vector<bool> finished;			// Flags for output product price finished for each counter
 
@@ -473,25 +475,28 @@ public:
 		// loop until all counters thread end
 		while (true)
 		{
+			bool poped = false;
 			unique_lock<mutex> lk(inputmtx);
 			int i = 0;
 			if (joinedNum == counterNum)	// all counters thread end
 				return;						// end database thread
 			inputCond.wait(lk, [&]()->bool {	// using condion varible to check if there is one counter need to process data, and the get the counter id
-				lock_guard<mutex> lck(outputmtx);
-				i = 0;
-				while (i < counterNum)
+				if (!requests.empty())
 				{
-					if (ready[i])
-						return ready[i];
-					if (++i == counterNum)
-					{						
-						return true;
+					{
+						lock_guard<mutex> lock(requestMtx);		// Lock requests queue to protect it
+						i = requests.front();
+						requests.pop();
 					}
+					poped = true;
+					return true;
 				}
-				});
-			if (i != counterNum)	// if id is valid, processing the product name and set up the product price
-			{				
+				else if (joinedNum == counterNum)
+					return true;
+				return false;
+				});		
+			if (poped)
+			{
 				ready[i] = false;		// set input product name ready flag back to false for next request
 				string name = names[i];
 				auto ite = find_if(table.begin(), table.end(), [&](auto i) {return i.getName() == name; });
@@ -614,7 +619,12 @@ public:
 			while (regex_search(line2, result, rBarcode))	// Using regular epression to spilt line2(items)
 			{
 				name = convertor.decodeHex(result.str());	// Convert Barcode in to product name
+				{
+					lock_guard<mutex> lock(requestMtx);		// Lock requests queue to protect it
+					requests.push(i);
+				}
 				ready[i] = true;							// set this counter's ready to access database flag to true
+				inputCond.notify_all();
 				unique_lock<mutex> lk(outputmtx);
 				outputCond.wait(lk, [&] {return finished[i]; });	// Wait until database finish its previous work
 				total += price;	
@@ -628,9 +638,10 @@ public:
 			outfile << line1 << '\n';
 			for_each(items.begin(), items.end(), [&](auto i) {outfile << i.first << ',' << i.second << '\n'; });
 			outfile << "Total," << total << '\n';
-			outfile << "Counter Id," << i + 1 << '\n' << '\n';
+			outfile << "Lane Id," << i + 1 << '\n' << '\n';
 		}
 		joinedNum++;		// Once the counter(lane) ended, joined thread number + 1
+		inputCond.notify_one();
 	}
 };
 
@@ -672,8 +683,11 @@ public:
 			counters[i] = thread(&Counter::outputBill, Counter(), ref(infile), ref(outfile), ref(convertor), ref(names[i]), ref(prices[i]), i);
 		thread dataCenter = thread(&ProductTable::searchPrice, ref(pT), ref(names), ref(prices));	//set up database thread
 		dataCenter.join();
-		for (auto&& i: counters)
-			i.join();		
+		for (int i = 0; i < counterNum; i++)
+		{
+			counters[i].join();			
+		}
+					
 		infile.close();
 		outfile.close();
 	}
